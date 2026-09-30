@@ -21,6 +21,35 @@ class ActionResult(BaseModel):
     entry: dict[str, Any] | None = None
 
 
+class BatchActionPayload(BaseModel):
+    """批量动作：对一组记录执行同一个操作。"""
+
+    action: str
+    ids: list[int] = Field(default_factory=list)
+    values: dict[str, Any] = Field(default_factory=dict)
+    remark: str | None = None
+
+
+class BatchActionItem(BaseModel):
+    """批量动作中单条记录的执行结果，失败时 message 说明原因。"""
+
+    id: int
+    label: str
+    ok: bool
+    message: str
+    entry: dict[str, Any] | None = None
+
+
+class BatchActionResult(BaseModel):
+    ok: bool
+    action: str
+    total: int = 0
+    succeeded: int = 0
+    failed: int = 0
+    message: str = ""
+    results: list[BatchActionItem] = Field(default_factory=list)
+
+
 class EntryPayload(BaseModel):
     """登记或修改一条业务记录时提交的字段集合。"""
 
