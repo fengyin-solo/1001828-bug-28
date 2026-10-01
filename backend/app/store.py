@@ -7,6 +7,20 @@ from __future__ import annotations
 from typing import Any
 
 from app.seed import SEED_ROWS
+from app.status_rules import ABNORMAL_STATUSES, PENDING_STATUSES, is_abnormal, is_pending
+
+
+def row_pending(module: str, row: dict[str, Any]) -> bool:
+    """待确认口径：有状态规则按状态推导，没登记的模块沿用行上的 pending 标记。"""
+    if module in PENDING_STATUSES:
+        return is_pending(module, row.get("status"))
+    return bool(row.get("pending"))
+
+
+def row_abnormal(module: str, row: dict[str, Any]) -> bool:
+    if module in ABNORMAL_STATUSES:
+        return is_abnormal(module, row.get("status"))
+    return bool(row.get("abnormal"))
 
 
 class Store:
@@ -34,8 +48,8 @@ class Store:
             modules.append({
                 "name": name,
                 "created": len(rows),
-                "pending": sum(1 for row in rows if row.get("pending")),
-                "abnormal": sum(1 for row in rows if row.get("abnormal")),
+                "pending": sum(1 for row in rows if row_pending(name, row)),
+                "abnormal": sum(1 for row in rows if row_abnormal(name, row)),
             })
         cards = [
             {"label": "业务模块", "value": len(modules)},

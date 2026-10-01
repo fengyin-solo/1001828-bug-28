@@ -21,6 +21,30 @@ class ActionResult(BaseModel):
     entry: dict[str, Any] | None = None
 
 
+class BatchActionPayload(BaseModel):
+    """批量动作：同一动作应用到多条记录，同一条井室只算一次。"""
+
+    action: str
+    entry_ids: list[int] = Field(default_factory=list)
+
+
+class BatchActionItem(BaseModel):
+    id: int
+    ok: bool
+    message: str
+    entry: dict[str, Any] | None = None
+
+
+class BatchActionResult(BaseModel):
+    ok: bool
+    action: str
+    total: int
+    success_count: int
+    failure_count: int
+    message: str
+    items: list[BatchActionItem]
+
+
 class EntryPayload(BaseModel):
     """登记或修改一条业务记录时提交的字段集合。"""
 

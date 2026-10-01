@@ -5,8 +5,14 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.schemas import ActionResult, EntryPayload, PageResult
-from app.services.valve import ValveService
+from app.schemas import (
+    ActionResult,
+    BatchActionPayload,
+    BatchActionResult,
+    EntryPayload,
+    PageResult,
+)
+from app.services.valve import ACTION_RULES, ValveService
 
 router = APIRouter(prefix="/api/valve", tags=["阀门井室"])
 
@@ -28,6 +34,49 @@ def list_entries(
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
     items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
+
+
+@router.get("/stats")
+def get_stats() -> dict[str, int]:
+    """台账统计：在册、启闭卡涩、待确认，待确认口径与运营概览一致。"""
+    return service.stats()
+
+
+@router.post("/batch-actions", response_model=BatchActionResult)
+def run_batch_action(payload: BatchActionPayload) -> BatchActionResult:
+    """对多条阀门执行同一动作：逐条独立处理，已成功的立即生效，失败的逐条给出原因。
+
+    同一批里重复出现的阀门只处理一次；整批请求即使部分失败也返回 200，
+    由 items 逐条说明结果，前端可只对失败条目重试。
+    """
+    action = (payload.action or "").strip()
+    if action not in ACTION_RULES:
+        raise HTTPException(status_code=400, detail=f"动作「{action}」不属于阀门井室可执行范围")
+    if not payload.entry_ids:
+        raise HTTPException(status_code=400, detail="未选择任何阀门，请先勾选要操作的记录")
+    items = service.run_batch(action, payload.entry_ids)
+    success_count = sum(1 for item in items if item["ok"])
+    failure_count = len(items) - success_count
+    if failure_count:
+        summary = f"批量{action}完成：成功 {success_count} 条，失败 {failure_count} 条，可对失败条目重试"
+    else:
+        summary = f"批量{action}完成：{success_count} 条均已生效"
+    return BatchActionResult(
+        ok=failure_count == 0,
+        action=action,
+        total=len(items),
+        success_count=success_count,
+        failure_count=failure_count,
+        message=summary,
+        items=items,
+    )
+
+
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出阀门井室清单：返回当前过滤条件下的全量数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "valve", "total": total, "items": items}
 
 
 @router.get("/{entry_id}", response_model=dict)
@@ -56,10 +105,3 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出阀门井室清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "valve", "total": total, "items": items}
